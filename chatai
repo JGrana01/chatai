@@ -1,0 +1,418 @@
+#!/bin/sh
+#set -x
+# aichat - Start an interactive chat session with Googles Gemini AI on Asuswrt-Merlin based routers
+#
+#
+
+readonly PROGNAME=aichat
+readonly PROGDIR=/jffs/scripts
+readonly SCRIPTDIR=/jffs/addons/$PROGNAME
+readonly SCRIPTLOGDIR=/jffs/addons/$PROGNAME/logs
+readonly CONFIG=$PROGNAME.conf
+readonly VERSION=0.4.2
+
+
+# text formatting
+
+readonly BOLD="\\e[1m"
+readonly SETTING="${BOLD}\\e[36m"
+readonly CLEARFORMAT="\\e[0m"
+
+# Debug and verbose flags
+
+debug=0
+debughtml=0
+watchlogs=0
+
+# Worker functions
+
+showhelp() {
+	printf "\\naichat (Ver $VERSION) - start an interactive chat session with Googles Gemini AI
+	printf " "
+	printf "\\nUsage: chatai [log] [help] [install] [uninstall] [update]\\n\\n"
+	printf "\\tlog - log the session for later viewing\\n"
+	printf "\\thelp - show this message\\n"
+	printf "\\tinstall - install chatai and create addon dir and config file\\n"
+	printf "\\tuninstall - remove chatai and its directory, chatlogs and config file\\n"
+	printf "\\tupdate - check for and optionally update $PROGRAME\\n"
+	printf "\\n"	
+}
+
+dprint() {
+	if [ $debug = 1 ]; then
+		printf "\\n%s\\n" "$1"
+	fi
+}
+
+waitsome() {
+	if [ $1 = 1 ]; then
+		printf "\\nPress Enter to Continue..."
+		read -r
+	fi
+}
+
+
+checkexit() {
+         if $(read -r -t $SLDELAY); then
+            	printf "\\n"
+		cleanupfiles
+		exit
+        fi
+}
+
+doinstall() {
+	printf "\\nInstall $PROGNAME\\n"
+	printf "\\nAre you sure you want to install $PROGNAME and it's required apps (fold and jq) and config file (Y|N) ?"
+	read -r answr
+	case $answr in
+		Y|y)
+			printf "\\nInstalling..."
+			;;
+			N|n)
+				printf "\\nOk, not installing\\n"
+				exit
+			;;
+			*)
+				printf "Enter either Y or N...exiting\\n"
+				exit
+			;;
+	esac
+
+# make sure it was downloaded to the correct place
+
+	if [ ! -f /jffs/scripts/$PROGNAME ]; then
+		cp ./$PROGNAME.sh /jffs/scripts/$PROGNAME
+		rm -f ./$PROGNAME.sh
+	fi
+
+# check for entware, bail if not there
+
+	printf "\\n\\nInstalling $PROGNAME\\n\\n"
+	if [ ! -x /opt/bin/opkg ]; then
+		printf "\\nEntware not deteted (and needed)\\n"
+		printf "Install using AMTM and try again.\\n"
+		exit 1
+	fi
+
+# check for required helper apps
+
+	if [ ! -x /opt/bin/fold ] || [ ! -x /opt/bin/jq ]; then
+		printf "\\nThe applications fold and jq are needed.\\n"
+		printf "   Check and install now (Y|N) ? "
+		read -r answr
+		case $answr in
+			Y|y)
+				printf "\\nInstalling..."
+				/opt/bin/opkg update
+				if [ ! -x /opt/bin/fold ]; then
+					/opt/bin/opkg install coreutils-fold
+					if [ ! -x /opt/bin/fold ]; then
+						printf "\\nError - can't seem to install fold...\\n"
+						printf "   Exiting\\n"
+						exit 1
+					fi
+				fi
+				if [ ! -x /opt/bin/jq ]; then
+					/opt/bin/opkg install jq
+					if [ ! -x /opt/bin/jq ]; then
+						printf "\\nError - can't seem to install jq...\\n"
+						printf "   Exiting\\n"
+						exit 1
+					fi
+				fi
+				printf "\\nSuccess\\n"
+			;;
+			N|n)
+				printf "This scripts requires fold and jq...exiting\\n"
+				exit 1
+			;;
+			*)
+				printf "Enter either Y or N...exiting\\n"
+				exit 1
+			;;
+		esac
+	fi
+
+# setup addon dir and config file
+
+	mkdir -p $SCRIPTDIR
+
+
+cat <<EOF > $SCRIPTDIR/$CONFIG
+#
+# $PROGNAME conf file
+#
+
+API_KEY="PutYourAPIKeyHere"          # Put here ;-)
+LOGFILE="$SCRIPTDIR/logs"            # location to store chat log sessions
+NUMLOGS="5"			     # number of log sessions to save for later viewing
+EOF
+
+# now make link to app
+
+	printf "\\nInstalling $PROGNAME in /opt/sbin\\n"
+        if [ -d "/opt/sbin" ] && [ ! -L "/opt/sbin/$PROGNAME" ]; then
+               	ln -s "$PROGDIR/$PROGNAME" "/opt/sbin/$PROGNAME"
+             	chmod 0755 "/opt/sbin/$PROGNAME"
+        fi
+
+	printf "\\n$SCRIPTDIR/$CONFIG created and $PROGNAME installed in /opt/sbin\\n"
+	printf "\\nBefore running $PROGNAME you will need to get an API key from https://aistudio.google.com/app/apikey\\n"
+	printf "Once you get the key, edit $SCRIPTDIR/$CONFIG and change the API_KEY line\\n\\n"
+	printf "\\nInstall done.\\n"
+	exit
+}
+
+douninstall() {
+	if [ ! -x $PROGDIR/$PROGNAME ] || [ ! -d $SCRIPTDIR ]; then
+		printf "\\n$PROGNAME doesn't seem to be installed\\n"
+		exit
+	fi
+
+	source $SCRIPTDIR/$CONFIG
+
+	printf "\\nUninstall $PROGNAME\\n"
+	printf "\\nAre you sure you want to remove $PROGNAMEi, it's config file and chat logs (Y|N) ?"
+	read -r answr
+	case $answr in
+		Y|y)
+			printf "\\nUninstalling..."
+			rm -rf $SCRIPTDIR
+			rm -f $PROGDIR/$PROGNAME
+                   	if [ -L /opt/sbin/$PROGNAME ]; then
+				rm -f /opt/sbin/$PROGNAME
+		   	fi
+			printf "\\nSuccess - $PROGNAME uninstalled.\\n"
+		;;
+		N|n)
+				printf "\\nok, exiting...\\n"
+				exit 
+		;;
+		*)
+				printf "Enter either Y or N...exiting\\n"
+				exit
+		;;
+	esac
+}
+
+doupdate() {
+	if [ -x "$PROGDIR/$PROGNAME" ] && [ -d "$SCRIPTDIR" ]; then
+
+		curl --retry 3 --silent "https://raw.githubusercontent.com/JGrana01/aichat/master/SCRIPTVER" -o "$SCRIPTDIR/VERSION.new"
+		
+		if [ -z "$SCRIPTDIR/VERSION.new" ]; then
+			echo "aichat: Could not retrieve version number from github. Exiting."
+			exit
+		fi
+
+		oldwas=$(grep -m 1 "VERSION=" "$PROGDIR/$PROGNAME" | sed 's/readonly VERSION\=//g')
+		newis=$(grep -m 1 "VERSION=" "$SCRIPTDIR/VERSION.new" | sed 's/VERSION\=//g')
+
+		rm -f "$SCRIPTDIR/VERSION.new"
+
+		if [ "$oldwas" = "$newis" ]; then
+			printf "\\n\\aichat is up to date\\n\\n"
+			exit
+		fi
+
+		printf "New version ($newis) of aichat found.\\n"
+		printf "\\nDownload and install the latest version of aichat (Y/N)? "
+		read a
+		if [ "$a" = "n" ] || [ "$a" = "N" ]; then
+			exit
+		else
+			printf "\\nOk, downloading aichat\\n"
+			curl --retry 3 --silent "https://raw.githubusercontent.com/JGrana01/aichat/master/aichat" -o /jffs/scripts/aichat && chmod 0755 /jffs/scripts/aichat
+			printf "\\n\\nDone.\\n"
+			printf "\\nUpdated to version %s\\n\\n" $newis
+			
+		fi
+	else
+		printf "\\n\\n$PROGNAME doesnt appear to be installed!!!\\n"
+	fi
+
+}
+
+
+# Function to call GenAI
+genaiqa() {
+
+# prepare text and send off...
+
+	question="Please answer the following: ${1}?"
+   	printf "\\nWorking..."
+
+    # Call GenAI API
+
+    curl -sSX POST \
+        -H 'Content-Type: application/json' \
+        -H "x-goog-api-key: ${API_KEY}" \
+        -o "genresp" \
+        -d '{
+                "contents": [
+                        {
+                        "role": "user",
+                        "parts": [
+                                {
+                                "text": "'"$question"'"
+                                }
+                        ]
+                        }
+                ]
+                }' \
+        "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent"
+
+    	if [ -s genresp ]; then
+        	output=$(jq -r '.candidates[0].content.parts[0].text' genresp)
+    	else
+        	output="Unable to get any answers from Google AI"
+    	fi
+
+    	printf "\\r${BOLD} %s ${CLEARFORMAT}\\n\\n" "$output"
+
+	if [ $logchat = 1 ]; then
+		printf "\\n%s\\n" $question >> $logis
+    		printf "\\r${BOLD} %s ${CLEARFORMAT}\\n\\n" "$output" >> $logis
+	fi
+
+}
+
+# Function to start chat log
+startchatlog() {
+
+	todayis=$(date +"%b %d")
+    	timestamp=$(date +"%c")
+	logis="$SCRIPTDIR/log/chatlog_$timestamp"
+	printf "\\n aichat Chat Log: $todayis\\n\\n" > $logis
+
+}
+
+# Function to close chat log
+closechatlog() {
+
+	printf "\\n\\nEnd of Chat Log\\n" >> $logis
+	printf "\\n\\nChat log saved as $logis\\n"
+}
+
+dochat() {
+
+	checkenv
+	setconfigs
+
+	printf "\\n\\nGeminiAI Chat mode. Enter a line of text and get a response.\\n"
+	printf "    Enter "q" to exit this mode\\n\\n"
+
+	while true; do
+    		read -p "chat> " input
+		if [[ "$input" == "q" ]]; then
+        		echo "Exiting..."
+        		break
+    		fi
+
+    # Call GenAI API
+	if [ ! -z "$input" ]; then
+		cleanout=$(echo $input | sed "s/\"/'/g")
+		genaiqa "$cleanout"
+	fi
+done
+}
+
+#
+# Main Function to check for options and installed needed apps
+#          and build the log file and response
+doaichat() {
+
+# look for any command line options
+
+	if [ ! "$#" -eq 0 ]; then
+		while [ "$#" -gt 0 ]; do
+    			case $1 in
+				install)
+					doinstall
+					exit
+				;;
+				uninstall)
+					douninstall
+					exit
+				;;
+				help)
+					showhelp
+					exit
+				;;
+				log)
+					logchat=1
+				;;
+				update)
+					doupdate
+					exit
+				;;
+				debug)
+					debug=1
+					printf "\\nDebug On\\n"
+           			;;
+				*)
+	   				printf "\\naichat: Invalid argument $1\\n"
+					showhelp
+	   				exit
+           			;;
+    			esac
+    		shift
+		done
+	fi
+
+# check environment and load confgis
+
+	checkenv
+	setconfigs
+
+	if [ $logchat = 1 ]; then
+		startchatlog
+	fi
+
+	dochat
+
+	if [ $logchat = 1 ]; then
+		closechatlog
+	fi
+
+}
+
+checkenv() {
+
+	if [ ! -f $SCRIPTDIR/$CONFIG ]; then
+		printf "\\n$SCRIPTDIR/$CONFIG not detected, please run install\\n"
+		exit
+	fi
+
+	if grep -q "PutYourAPIKeyHere" $SCRIPTDIR/$CONFIG; then
+		printf "\\n API Key not detected in $SCRIPTDIR/$CONFIG\\n"
+		printf "\\nGet a key from https://aistudio.google.com/app/apikey and add it\\n"
+		printf "to $SCRIPTDIR/$CONFIG.\\n"
+		printf "chatai: exiting\\n"
+		exit
+	fi
+
+}
+
+setconfigs() {
+
+# ok, load config info
+
+	source $SCRIPTDIR/$CONFIG
+
+}
+
+# remove temp files
+
+cleanupfiles() {
+	rm -f genresp
+}
+
+# Main script
+
+doaichat "$@"
+
+cleanupfiles
+
+exit
+
