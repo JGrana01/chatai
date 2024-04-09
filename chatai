@@ -444,7 +444,7 @@ cleanupfiles() {
 
 doaichat "$@"
 
-#cleanupfiles
+cleanupfiles
 
 exit
 
