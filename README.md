@@ -50,8 +50,8 @@ chat>
 
 Ask questions and get (typically) a response in bold
 
-Chati supports a logging function where it will save a number of chat sesstions in a log file for later viewing. The number of chat sessions saved is configurable in the /jffs/addons/chatai/chatai.conf file.
-You can also change the location of the chat session logs to a different directory, again by editing /jffs/addons/chatai/chatai.conf.
+Chatai supports a logging function where it will save a number of chat sesstions in a log file for later viewing. The number of chat sessions saved is configurable (NUMLOGS) in the /jffs/addons/chatai/chatai.conf file.
+You can also change the location of the chat session logs to a different directory (LOGDIR), again by editing /jffs/addons/chatai/chatai.conf.
 To enable logging for a session, use the "log" argument:
 
 ```
@@ -64,6 +64,8 @@ chatlog_2024-04-09-12-05-14
 ```
 
 As new chat logs are created, chatai will remove the earlist logs to keep the number of files to NUMLOGS. This is configurable.
+
+There is also an argument (show) that will display all the chat sessions (using "more) from the earlist to the most recent.
 
 Here is a typical /jffs/addons/chatai/chatai.conf file:
 ```
