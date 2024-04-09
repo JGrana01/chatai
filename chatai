@@ -157,7 +157,7 @@ EOF
              	chmod 0755 "/opt/sbin/$PROGNAME"
         fi
 
-	mkdir $LOGDIR
+	mkdir -p $LOGDIR
 
 	printf "\\n$SCRIPTDIR/$CONFIG created and $PROGNAME installed in /opt/sbin\\n"
 	printf "\\nBefore running $PROGNAME you will need to get an API key from https://aistudio.google.com/app/apikey\\n"
