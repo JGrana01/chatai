@@ -1,15 +1,15 @@
 #!/bin/sh
 #set -x
-# aichat - Start an interactive chat session with Googles Gemini AI on Asuswrt-Merlin based routers
+# chatai - Start an interactive chat session with Googles Gemini AI on Asuswrt-Merlin based routers
 #
 #
 
-readonly PROGNAME=chata1
+readonly PROGNAME=chatai
 readonly PROGDIR=/jffs/scripts
 readonly SCRIPTDIR=/jffs/addons/$PROGNAME
 readonly SCRIPTLOGDIR=/jffs/addons/$PROGNAME/logs
 readonly CONFIG=$PROGNAME.conf
-readonly VERSION=0.4.2
+readonly VERSION=0.1.1
 
 
 # text formatting
@@ -21,15 +21,17 @@ readonly CLEARFORMAT="\\e[0m"
 # Debug and verbose flags
 
 debug=0
+logchat=0
 debughtml=0
 watchlogs=0
 
 # Worker functions
 
 showhelp() {
-	printf "\\naichat (Ver $VERSION) - start an interactive chat session with Googles Gemini AI\\n"
-	printf "\\nUsage: chatai [log] [help] [install] [uninstall] [update]\\n\\n"
+	printf "\\nchatai (Ver $VERSION) - start an interactive chat session with Googles Gemini AI\\n"
+	printf "\\nUsage: chatai [log] [show] [help] [install] [uninstall] [update]\\n\\n"
 	printf "\\tlog - log the session for later viewing\\n"
+	printf "\\tshow - show all the saved chat log sessions\\n"
 	printf "\\thelp - show this message\\n"
 	printf "\\tinstall - install chatai and create addon dir and config file\\n"
 	printf "\\tuninstall - remove chatai and its directory, chatlogs and config file\\n"
@@ -143,7 +145,7 @@ cat <<EOF > $SCRIPTDIR/$CONFIG
 #
 
 API_KEY="PutYourAPIKeyHere"          # Put here ;-)
-LOGFILE="$SCRIPTDIR/logs"            # location to store chat log sessions
+LOGDIR="$SCRIPTDIR/logs"            # location to store chat log sessions
 NUMLOGS="5"			     # number of log sessions to save for later viewing
 EOF
 
@@ -154,6 +156,8 @@ EOF
                	ln -s "$PROGDIR/$PROGNAME" "/opt/sbin/$PROGNAME"
              	chmod 0755 "/opt/sbin/$PROGNAME"
         fi
+
+	mkdir $LOGDIR
 
 	printf "\\n$SCRIPTDIR/$CONFIG created and $PROGNAME installed in /opt/sbin\\n"
 	printf "\\nBefore running $PROGNAME you will need to get an API key from https://aistudio.google.com/app/apikey\\n"
@@ -197,10 +201,10 @@ douninstall() {
 doupdate() {
 	if [ -x "$PROGDIR/$PROGNAME" ] && [ -d "$SCRIPTDIR" ]; then
 
-		curl --retry 3 --silent "https://raw.githubusercontent.com/JGrana01/aichat/master/SCRIPTVER" -o "$SCRIPTDIR/VERSION.new"
+		curl --retry 3 --silent "https://raw.githubusercontent.com/JGrana01/chatai/master/SCRIPTVER" -o "$SCRIPTDIR/VERSION.new"
 		
 		if [ -z "$SCRIPTDIR/VERSION.new" ]; then
-			echo "aichat: Could not retrieve version number from github. Exiting."
+			echo "chatai: Could not retrieve version number from github. Exiting."
 			exit
 		fi
 
@@ -210,19 +214,19 @@ doupdate() {
 		rm -f "$SCRIPTDIR/VERSION.new"
 
 		if [ "$oldwas" = "$newis" ]; then
-			printf "\\n\\aichat is up to date\\n\\n"
+			printf "\\n\\chatai is up to date\\n\\n"
 			exit
 		fi
 
-		printf "New version ($newis) of aichat found.\\n"
-		printf "\\nDownload and install the latest version of aichat (Y/N)? "
+		printf "New version ($newis) of chatai found.\\n"
+		printf "\\nDownload and install the latest version of chatai (Y/N)? "
 		read a
 		if [ "$a" = "n" ] || [ "$a" = "N" ]; then
 			exit
 		else
-			printf "\\nOk, downloading aichat\\n"
-			curl --retry 3 --silent "https://raw.githubusercontent.com/JGrana01/aichat/master/aichat" -o /jffs/scripts/aichat && chmod 0755 /jffs/scripts/aichat
-			printf "\\n\\nDone.\\n"
+			printf "\\nOk, downloading chatai\\n"
+			curl --retry 3 --silent "https://raw.githubusercontent.com/JGrana01/chatai/master/chatai" -o /jffs/scripts/chatai && chmod 0755 /jffs/scripts/chatai
+		printf "\\n\\nDone.\\n"
 			printf "\\nUpdated to version %s\\n\\n" $newis
 			
 		fi
@@ -261,7 +265,7 @@ genaiqa() {
                 }' \
         "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent"
 
-    	if [ -s genresp ]; then
+    	if [ ! -z genresp ]; then
         	output=$(jq -r '.candidates[0].content.parts[0].text' genresp)
     	else
         	output="Unable to get any answers from Google AI"
@@ -270,7 +274,7 @@ genaiqa() {
     	printf "\\r${BOLD} %s ${CLEARFORMAT}\\n\\n" "$output"
 
 	if [ $logchat = 1 ]; then
-		printf "\\n%s\\n" $question >> $logis
+		printf "\\n%s\\n" "Q: $cleanout" >> $logis
     		printf "\\r${BOLD} %s ${CLEARFORMAT}\\n\\n" "$output" >> $logis
 	fi
 
@@ -279,18 +283,37 @@ genaiqa() {
 # Function to start chat log
 startchatlog() {
 
-	todayis=$(date +"%b %d")
-    	timestamp=$(date +"%c")
-	logis="$SCRIPTDIR/log/chatlog_$timestamp"
-	printf "\\n aichat Chat Log: $todayis\\n\\n" > $logis
+	numberlogs=$(ls -l $LOGDIR | wc -l)
+	if [ $numberlogs -ge $NUMLOGS ]; then
+		rm $LOGDIR/$(ls -t $LOGDIR | tail -n 1) # keep only the last NUMLOGS
+	fi
+	timestamp=$(date '+%Y-%m-%d-%H-%M-%S')
+	logis="$LOGDIR/chatlog_$timestamp"
+	printf "\\n chatai Chat Log: $timestamp\\n\\n" > $logis
 
 }
 
 # Function to close chat log
 closechatlog() {
 
-	printf "\\n\\nEnd of Chat Log\\n" >> $logis
+	printf "\\n\\nEnd of Chat Log $timestamp\\n" >> $logis
 	printf "\\n\\nChat log saved as $logis\\n"
+}
+
+showlogs() {
+
+	source $SCRIPTDIR/$CONFIG
+	numberlogs=$(ls -l $LOGDIR | wc -l)
+	if [ $numberlogs = 0 ]; then
+		printf "\\n\\nNo logs to show...\\n"
+	else
+		logs=$(ls -t "$LOGDIR")
+		for log in $logs
+		do
+			/bin/more $LOGDIR/$log
+			read a
+		done
+	fi
 }
 
 dochat() {
@@ -341,6 +364,11 @@ doaichat() {
 				log)
 					logchat=1
 				;;
+				show)
+					showlogs
+					exit
+				;;
+
 				update)
 					doupdate
 					exit
@@ -350,7 +378,7 @@ doaichat() {
 					printf "\\nDebug On\\n"
            			;;
 				*)
-	   				printf "\\naichat: Invalid argument $1\\n"
+	   				printf "\\nchatai: Invalid argument $1\\n"
 					showhelp
 	   				exit
            			;;
@@ -411,7 +439,7 @@ cleanupfiles() {
 
 doaichat "$@"
 
-cleanupfiles
+#cleanupfiles
 
 exit
 
