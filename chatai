@@ -27,8 +27,7 @@ watchlogs=0
 # Worker functions
 
 showhelp() {
-	printf "\\naichat (Ver $VERSION) - start an interactive chat session with Googles Gemini AI
-	printf " "
+	printf "\\naichat (Ver $VERSION) - start an interactive chat session with Googles Gemini AI\\n"
 	printf "\\nUsage: chatai [log] [help] [install] [uninstall] [update]\\n\\n"
 	printf "\\tlog - log the session for later viewing\\n"
 	printf "\\thelp - show this message\\n"
