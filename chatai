@@ -9,7 +9,7 @@ readonly PROGDIR=/jffs/scripts
 readonly SCRIPTDIR=/jffs/addons/$PROGNAME
 readonly SCRIPTLOGDIR=/jffs/addons/$PROGNAME/logs
 readonly CONFIG=$PROGNAME.conf
-readonly VERSION=0.1.1
+readonly VERSION=0.1.2
 
 
 # text formatting
@@ -157,6 +157,7 @@ EOF
              	chmod 0755 "/opt/sbin/$PROGNAME"
         fi
 
+	LOGDIR="$SCRIPTDIR/logs"            # define for initial install
 	mkdir -p $LOGDIR
 
 	printf "\\n$SCRIPTDIR/$CONFIG created and $PROGNAME installed in /opt/sbin\\n"
@@ -282,6 +283,10 @@ genaiqa() {
 
 # Function to start chat log
 startchatlog() {
+
+	if [ ! -d $LOGDIR ]; then   # make sure log directory exists - might have been changed
+		mkdir -p $LOGDIR
+	fi
 
 	numberlogs=$(ls -l $LOGDIR | wc -l)
 	if [ $numberlogs -ge $NUMLOGS ]; then
