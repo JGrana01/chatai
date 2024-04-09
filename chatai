@@ -4,7 +4,7 @@
 #
 #
 
-readonly PROGNAME=aichat
+readonly PROGNAME=chata1
 readonly PROGDIR=/jffs/scripts
 readonly SCRIPTDIR=/jffs/addons/$PROGNAME
 readonly SCRIPTLOGDIR=/jffs/addons/$PROGNAME/logs
