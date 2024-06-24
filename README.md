@@ -1,6 +1,7 @@
 # chatai
 
-chatai will start an interactive "chat" session with Googles Gemini AI bot.
+chatai will start an interactive "chat" session with either Googles Gemini AI or Anthropics Claude (or both at once) bots.
+chatai also supports an analyze mode for files such as small shell scripts, log files etc.
 
 ## Installation
 
@@ -8,11 +9,17 @@ For Asuswrt-merlin based routers running Entware, using your preferred SSH clien
 
 /usr/sbin/curl --retry 3 "https://raw.githubusercontent.com/JGrana01/chatai/master/chatai" -o "/jffs/scripts/chatai" && chmod 0755 /jffs/scripts/chatai && /jffs/scripts/chatai install
 
-Before actually using chatai for the first time, you will need to get an API_KEY from Google.
+Before actually using chatai for the first time, you will need to get an API_KEY from Google and/or Anthropic.
 
-Get the API key from https://aistudio.google.com/app/apikey
+Get the API key for Googles Gemini from https://aistudio.google.com/app/apikey
 
 ![image](https://github.com/JGrana01/genailogs/assets/11652784/e0b13ae5-cb94-405c-842f-9acf43c63056)
+
+Get the API key for Anthropics Claude by going to this website:
+
+https://console.anthropic.com/login
+
+
 
 Edit the /jffs/addons/chatai/chatai.conf file and put the api key string in the line:
 ```
