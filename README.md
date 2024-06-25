@@ -57,11 +57,11 @@ Usage: chatai [gemini|claude|both] [analyze filename] [log] [show] [help] [insta
 
 ## Command Line Options
 
-**gemini** - use Google Gemini for the chat session
+**gemini** - use Google Gemini for the chat session (overrides .conf file WHICHAI setting)
 
-**claude** - use Anthropics Claude for the session
+**claude** - use Anthropics Claude for the session (overrides .conf file WHICHAI setting)
 
-**both** - show answers from both AI bots. Geminis output will be cyan and Claude in blue
+**both** - show answers from both AI bots. Geminis output will be cyan and Claude in blue (overrides .conf file WHICHAI setting)
 
 **analyze** _filename_ - rather then start a chat session, send _filename_ to AI for analysys.
 
@@ -93,11 +93,13 @@ MAXLINES="200"                      # Maximum number of lines in a file to analy
 MAXSIZE="32767"                     # Maximum number of characters in any request
 
 ```
-WHICHAI - set to 0 (default) for Gemini, 1 for Claude or 2 to have both respond to your questions or analysis
-LOGDIR - where you want chatai to store log files of the session
-NUMLOGS - the number of log files to store at a time. Its a circular method - a new log file overrides the oldest
-MAXLINES - the maximium number of lines of text to send. This can be increased - but should be cautiously - more lines - more tokens used.
-MAXSIZE - this is the maximium number of characters to send. Again, can be increased - more dependent on shell variable length :-)
+_GAPI_KEY_ - the key created by you when you asked for a Gemini API key
+_CAPI_KEY_ - the key created by you when to setup Antropics Claude developer
+_WHICHAI_ - set to 0 (default) for Gemini, 1 for Claude or 2 to have both respond to your questions or analysis
+_LOGDIR_ - where you want chatai to store log files of the session. Default is in the /jffs/addons/chatai/logs
+_NUMLOGS_ - the number of log files to store at a time. Its a circular method - a new log file overrides the oldest
+_MAXLINES_ - the maximium number of lines of text to send. This can be increased - but should be cautiously - more lines - more tokens used.
+_MAXSIZE_ - this is the maximium number of characters to send. Again, can be increased - more dependent on shell variable length :-)
 
 ## Usage
 
@@ -114,7 +116,12 @@ GeminiAI Chat mode. Enter a line of text and get a response.
 
 chat>
 ```
-To do a session and log the session:
+Ask questions and get (typically) a response in either cyan if using Gemini or blue if Claude
+
+Chatai supports a logging function where it will save a number of chat sesstions in a log file for later viewing. The number of chat sessions saved is configurable (NUMLOGS) in the /jffs/addons/chatai/chatai.conf file.
+You can also change the location of the chat session logs to a different directory (LOGDIR), again by editing /jffs/addons/chatai/chatai.conf.
+To enable logging for a session, use the "log" argument:
+
 ```
 $ chatai log
 ```
@@ -127,19 +134,13 @@ As new chat logs are created, chatai will remove the earlist logs to keep the nu
 
 There is also an argument (show) that will display all the chat sessions (using "more") from the earlist to the most recent.
 
-Ask questions and get (typically) a response in bold
-
-Chatai supports a logging function where it will save a number of chat sesstions in a log file for later viewing. The number of chat sessions saved is configurable (NUMLOGS) in the /jffs/addons/chatai/chatai.conf file.
-You can also change the location of the chat session logs to a different directory (LOGDIR), again by editing /jffs/addons/chatai/chatai.conf.
-To enable logging for a session, use the "log" argument:
-
 Commands line arguments can be combined. For example, to have both bots answer your questions (or analyze your _file_) and log the session:
 
 ```
 $ chatai both log
 ```
 
-There is a special mode while in chat - analyze while in chat. To invoke this mode, while at the chat prompt, enter just the word "analyze":
+There is a **special mode** while in chat - analyze while in chat. To invoke this mode, while at the chat prompt, enter just the word "analyze":
 ```
 Enter text and get both responses.
 
@@ -157,7 +158,8 @@ What type of file to analyze:
 chatai will ask what type of file you plan to have analyzed (makes for more accurate analysis). Enter either 1 (text), 2 (code) or 3 (log)
 
 chatai will then ask for the filename. If it is too large (> MAXSIZE) it will tell you and not send on.
-If the file has more lines in it then MAXLINES, chatai will ask if you want it to reduce the number of lines to MAXLINES (using tail)
+If the file has more lines in it then MAXLINES, chatai will ask if you want it to reduce the number of lines to MAXLINES (using tail).
+Note below about special characters, especially with shell scripts. I'm working on solutions...
 
 Once the file is analyzed and displayed, chatai returns to chat mode. Useful for asking more questions about its analysis.
 
