@@ -9,7 +9,7 @@ readonly PROGDIR=/jffs/scripts
 readonly SCRIPTDIR=/jffs/addons/$PROGNAME
 readonly SCRIPTLOGDIR=/jffs/addons/$PROGNAME/logs
 readonly CONFIG=$PROGNAME.conf
-readonly VERSION=0.3.1
+readonly VERSION=0.3.2
 
 
 # text formatting
@@ -169,6 +169,8 @@ NUMLOGS="5"    			            # number of log sessions to save for later viewing
 MAXLINES="200"			            # Maximum number of lines in a file to analyze
                                             # use caution in making it too large...
 MAXSIZE="32767"			            # Maximum number of characters in any request to the chat bot
+ALWAYSTRIM="0"				    # always trim to MAZLINES any file for analysis
+                                            # 0: always ask first   1: trim file without asking
 EOF
 
 # now make link to app
@@ -267,33 +269,27 @@ doupdate() {
 }
 
 
+
 # chkfile - make sure file exists, is less than MAXSIZE and MAXLINES and cleanup for JSON
 
 chkfile() {
+
+	setconfigs
+	input="null"
 
 	if [ ! -f "$1" ]; then
 		printf "Couldn't find file $1\\n"
 		return
 	fi
 
-	setconfigs
-	
-	filesize=$(wc -c < "$1")
-
-	if [ "$filesize" -gt "$MAXSIZE" ]; then
-    		printf "File %s is too large (%d), needs to be smaller than %d bytes\n" "$1" "$filesize" "$MAXSIZE"
-    		exit 1
-	fi
-	
-	input="$(cat ${1})"
-	lines=$(echo "$input" | wc -l)
-	if [ "$lines" -gt "$MAXLINES" ]; then
+	lines=$(cat "$1" | wc -l)
+	if [ "$lines" -gt "$MAXLINES" ] && [ "$ALWAYSTRIM" = "0" ]; then
 		printf "$1 exceeds $MAXLINES lines. Its $lines lines long.\\n"
 		printf "Take the last $MAXLINES lines and analyze? (Y|N)? "
 		read a
 		case $a in
 			Y|y)
-				echo "$input" | tail -n "$MAXLINES" > tmpin
+				cat "$1" | tail -n "$MAXLINES" > tmpin
 				input="$(cat tmpin)"
 				rm -f tmpin
 			;;
@@ -302,7 +298,21 @@ chkfile() {
 				exit
 			;;
 		esac
+	else
+			cat "$1" | tail -n "$MAXLINES" > tmpin
+			input="$(cat tmpin)"
+			rm -f tmpin
 	fi
+
+	realfile=$(echo "$input")    # save for logging
+	
+	filesize=$(echo "$input" | wc -c)
+
+	if [ "$filesize" -gt "$MAXSIZE" ]; then
+    		printf "File %s is too large (%d), needs to be smaller than %d bytes\n" "$1" "$filesize" "$MAXSIZE"
+    		exit 1
+	fi
+
 }
 
 
@@ -347,9 +357,15 @@ callgemini() {
 
     	printf "\\r${BOLDCYAN} %s ${CLEARFORMAT}\\n\\n" "$output" | fold -w 80 -s
 
-	if [ $logchat = 1 ]; then
-		printf "\\n%s\\n" "Gemini Q: $question" >> $logis
-    		printf "\\r${BOLDCYAN} %s ${CLEARFORMAT}\\n\\n" "$output" >> $logis
+	if [ $logchat = "1" ]; then
+		printf "\\n\\nGemini Q:\\n\\n" >> $logis
+		if [ $analyze = "1" ]; then
+			echo "$realfile" >> $logis
+		else
+			echo "$question" >> $logis
+		fi
+		printf "\\n--- Response ---\\n" >> $logis
+    		printf "\\n${BOLDCYAN} %s ${CLEARFORMAT}\\n\\n" "$output" >> $logis
 	fi
 
 }
@@ -399,9 +415,15 @@ curl -sSX POST "https://api.anthropic.com/v1/messages" \
 
         printf "\\r${BOLDBLUE} %s ${CLEARFORMAT}\\n\\n" "$output" | fold -w 80 -s
 
-        if [ $logchat = 1 ]; then
-                printf "\\n%s\\n" "Claude Q: $question" >> $logis
-                printf "\\r${BOLDBLUE} %s ${CLEARFORMAT}\\n\\n" "$output" >> $logis
+        if [ $logchat = "1" ]; then
+		printf "\\n\\nClaude Q:\\n\\n" >> $logis
+		if [ $analyze = "1" ]; then
+			echo "$realfile" >> $logis
+		else
+			echo "$question" >> $logis
+		fi
+		printf "\\n--- Response ---\\n" >> $logis
+    		printf "\\n${BOLDCYAN} %s ${CLEARFORMAT}\\n\\n" "$output" >> $logis
         fi
 
 }
@@ -469,6 +491,10 @@ analyzefile() {
 
 # cleanup special chars for JSON strings and call AI bot
 
+	if [[ "$input" = "" ]]; then
+		return
+	fi
+
 	cleanfile=$(echo "$input" | sed 's/\"/\\"/g' | sed 's/$/\\n/g' | tr -d '\n')	# cleanup some JSON things...
 	question="Please analyze this ${ftype} file: ${cleanfile}"
 	case $WHICHAI in
@@ -523,7 +549,13 @@ doanalyze() {
 	printf "\\nFile: "
 	read filename
 	chkfile $filename
+	if [ "$input" = "null" ]; then
+		return
+	fi
+	prevanalyze=$analyze
+	analyze=1
 	analyzefile $ftype
+	analyze=$prevanalyze
 }
 		
 
@@ -628,6 +660,9 @@ doaichat() {
 				analyze)
 					analyze=1
 					chkfile "$2"
+					if [ "$input" = "null" ]; then
+						exit
+				fi
 					shift
 				;;
 				update)
@@ -653,18 +688,21 @@ doaichat() {
 	checkenv
 	setconfigs
 
-	if [ $analyze = 1 ]; then
-		analyzefile "text"
-		exit
+	if [ $logchat = "1" ]; then
+		startchatlog
 	fi
 
-	if [ $logchat = 1 ]; then
-		startchatlog
+	if [ $analyze = "1" ]; then
+		analyzefile "text"
+		if [ $logchat = "1" ]; then
+			closechatlog
+		fi
+		exit
 	fi
 
 	dochat
 
-	if [ $logchat = 1 ]; then
+	if [ $logchat = "1" ]; then
 		closechatlog
 	fi
 
