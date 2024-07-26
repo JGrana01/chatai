@@ -1,6 +1,6 @@
 #!/bin/sh
 #set -x
-# chatai - Start an interactive chat session with Googles Gemini AI on Asuswrt-Merlin based routers
+# chatai - Start an interactive chat session with Googles Gemini AI or Anthropics Claude on Asuswrt-Merlin based routers
 #
 #
 
@@ -9,27 +9,37 @@ readonly PROGDIR=/jffs/scripts
 readonly SCRIPTDIR=/jffs/addons/$PROGNAME
 readonly SCRIPTLOGDIR=/jffs/addons/$PROGNAME/logs
 readonly CONFIG=$PROGNAME.conf
-readonly VERSION=0.1.2
+readonly VERSION=0.2.3
 
 
 # text formatting
 
 readonly BOLD="\\e[1m"
-readonly SETTING="${BOLD}\\e[36m"
+readonly BOLDBLUE="${BOLD}\\e[34m"
+readonly BOLDCYAN="${BOLD}\\e[36m"
+readonly ERROR="\\e[31m"
 readonly CLEARFORMAT="\\e[0m"
 
-# Debug and verbose flags
+# Debug and various flags
 
-debug=0
-logchat=0
-debughtml=0
+debug=0		# set to 1 for verbose output
+logchat=0	# log the session or not
+debughtml=0	# save html info
 watchlogs=0
+analyze=0	# analyze file mode
+whichone=9	# default AI bot
+
+AIRESP="/tmp/chatai.tmp"
 
 # Worker functions
 
 showhelp() {
-	printf "\\nchatai (Ver $VERSION) - start an interactive chat session with Googles Gemini AI\\n"
-	printf "\\nUsage: chatai [log] [show] [help] [install] [uninstall] [update]\\n\\n"
+	printf "\\nchatai (Ver $VERSION) - start an interactive chat session with Googles Gemini or Anthropics Claude AI\\n"
+	printf "\\nUsage: chatai [gemini|claude|both] [analyze filename] [log] [show] [help] [install] [uninstall] [update]\\n\\n"
+	printf "\\tgemini - use Googles Gemini for chat (default)\\n"
+	printf "\\tclaude - use Anthropics Claude for chat\\n"
+	printf "\\tboth - use both AI and display the results in different color output\\n"
+	printf "\\tanalyze filename - analyze the suppled filename contents\\n"
 	printf "\\tlog - log the session for later viewing\\n"
 	printf "\\tshow - show all the saved chat log sessions\\n"
 	printf "\\thelp - show this message\\n"
@@ -62,6 +72,7 @@ checkexit() {
 }
 
 doinstall() {
+
 	printf "\\nInstall $PROGNAME\\n"
 	printf "\\nAre you sure you want to install $PROGNAME and it's required apps (fold and jq) and config file (Y|N) ?"
 	read -r answr
@@ -144,9 +155,14 @@ cat <<EOF > $SCRIPTDIR/$CONFIG
 # $PROGNAME conf file
 #
 
-API_KEY="PutYourAPIKeyHere"          # Put here ;-)
-LOGDIR="$SCRIPTDIR/logs"            # location to store chat log sessions
-NUMLOGS="5"			     # number of log sessions to save for later viewing
+GAPI_KEY="PutYourGeminiAPIKeyHere"          # Put Google Gemini API key here ;-)
+CAPI_KEY="PutYourClaudeAPIKeyHere"          # Put Anthropics Claude API key here ;-)
+WHICHAI="0"			    	    # which ai bot - 0: Gemini 1: Claude  2: both
+LOGDIR="$SCRIPTDIR/logs"                    # location to store chat log sessions
+NUMLOGS="5"    			            # number of log sessions to save for later viewing
+MAXLINES="200"			            # Maximum number of lines in a file to analyze
+                                            # use caution in making it too large...
+MAXSIZE="32767"			            # Maximum number of characters in any request to the chat bot
 EOF
 
 # now make link to app
@@ -161,9 +177,14 @@ EOF
 	mkdir -p $LOGDIR
 
 	printf "\\n$SCRIPTDIR/$CONFIG created and $PROGNAME installed in /opt/sbin\\n"
-	printf "\\nBefore running $PROGNAME you will need to get an API key from https://aistudio.google.com/app/apikey\\n"
-	printf "Once you get the key, edit $SCRIPTDIR/$CONFIG and change the API_KEY line\\n\\n"
+	printf "\\nBefore running $PROGNAME you will need to get a Google Gemini API key\\n"
+	printf "from https://aistudio.google.com/app/apikey\\n"
+	printf "or from Anthropic for Claude at https://docs.anthropic.com/en/api/getting-started\\n"
+	printf " - or both if you want to use both\\n"
+	printf "\\nOnce you get the key(s), edit $SCRIPTDIR/$CONFIG and change the\\n"
+	printf "appropriate API_KEY line\\n\\n"
 	printf "\\nInstall done.\\n"
+	printf "\\nHave fun ;-)\\n"
 	exit
 }
 
@@ -238,20 +259,59 @@ doupdate() {
 }
 
 
-# Function to call GenAI
-genaiqa() {
+# chkfile - make sure file exists, is less than MAXSIZE and MAXLINES and cleanup for JSON
+
+chkfile() {
+
+	if [ ! -f "$1" ]; then
+		printf "Couldn't find file $1\\n"
+		return
+	fi
+
+	setconfigs
+	
+	filesize=$(wc -c < "$1")
+
+	if [ "$filesize" -gt "$MAXSIZE" ]; then
+    		printf "File %s is too large (%d), needs to be smaller than %d bytes\n" "$1" "$filesize" "$MAXSIZE"
+    		exit 1
+	fi
+	
+	input="$(cat ${1})"
+	lines=$(echo "$input" | wc -l)
+	if [ "$lines" -gt "$MAXLINES" ]; then
+		printf "$1 exceeds $MAXLINES lines. Its $lines lines long.\\n"
+		printf "Take the last $MAXLINES lines and analyze? (Y|N)? "
+		read a
+		case $a in
+			Y|y)
+				echo "$input" | tail -n "$MAXLINES" > tmpin
+				input="$(cat tmpin)"
+				rm -f tmpin
+			;;
+			*)
+				printf "\\nShorten the file and try again\\n"
+				exit
+			;;
+		esac
+	fi
+}
+
+
+# Function to call Google Gemini 
+
+callgemini() {
 
 # prepare text and send off...
 
-	question="Please answer the following: ${1}?"
-   	printf "\\nWorking..."
+  	printf "\\nWorking..."
 
     # Call GenAI API
 
     curl -sSX POST \
         -H 'Content-Type: application/json' \
-        -H "x-goog-api-key: ${API_KEY}" \
-        -o "genresp" \
+        -H "x-goog-api-key: ${GAPI_KEY}" \
+        -o "${AIRESP}" \
         -d '{
                 "contents": [
                         {
@@ -266,18 +326,75 @@ genaiqa() {
                 }' \
         "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent"
 
-    	if [ ! -z genresp ]; then
-        	output=$(jq -r '.candidates[0].content.parts[0].text' genresp)
+    	if [ ! -z $AIRESP ]; then
+		if grep -q '"error":' $AIRESP; then
+			output=$(jq -r '.error | "\(.message)"' $AIRESP)
+	    		printf "\\r${ERROR} API Error ${CLEARFORMAT}\\n\\n"
+		else
+        		output=$(jq -r '.candidates[0].content.parts[0].text' $AIRESP)
+		fi
     	else
         	output="Unable to get any answers from Google AI"
     	fi
 
-    	printf "\\r${BOLD} %s ${CLEARFORMAT}\\n\\n" "$output"
+    	printf "\\r${BOLDCYAN} %s ${CLEARFORMAT}\\n\\n" "$output" | fold -w 80 -s
 
 	if [ $logchat = 1 ]; then
-		printf "\\n%s\\n" "Q: $cleanout" >> $logis
-    		printf "\\r${BOLD} %s ${CLEARFORMAT}\\n\\n" "$output" >> $logis
+		printf "\\n%s\\n" "Gemini Q: $question" >> $logis
+    		printf "\\r${BOLDCYAN} %s ${CLEARFORMAT}\\n\\n" "$output" >> $logis
 	fi
+
+}
+
+callclaude() {
+
+# prepare text and send off...
+
+        printf "\\nWorking..."
+
+    # Call Claude API
+
+# Construct the JSON payload
+JSON_PAYLOAD=$(cat <<EOF
+{
+  "model": "claude-3-sonnet-20240229",
+  "max_tokens": 1024,
+  "messages": [
+    {
+      "role": "user",
+      "content": "${question}"
+    }
+  ]
+}
+EOF
+)
+
+# Send the request to the API
+
+curl -sSX POST "https://api.anthropic.com/v1/messages" \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: $CAPI_KEY" \
+  -H "anthropic-version: 2023-06-01" \
+  -o "${AIRESP}" \
+  -d "$JSON_PAYLOAD"
+
+        if [ ! -z $AIRESP ]; then
+		if grep -q '"error":' $AIRESP; then
+			output=$(jq -r '.error | "\(.type): \(.message)"' $AIRESP)
+	    		printf "\\r${ERROR} API Error ${CLEARFORMAT}\\n\\n"
+		else
+                	output=$(jq -r '.content[0].text' $AIRESP)
+		fi
+        else
+                output="Unable to get any answers from Claude AI"
+        fi
+
+        printf "\\r${BOLDBLUE} %s ${CLEARFORMAT}\\n\\n" "$output" | fold -w 80 -s
+
+        if [ $logchat = 1 ]; then
+                printf "\\n%s\\n" "Claude Q: $question" >> $logis
+                printf "\\r${BOLDBLUE} %s ${CLEARFORMAT}\\n\\n" "$output" >> $logis
+        fi
 
 }
 
@@ -294,7 +411,21 @@ startchatlog() {
 	fi
 	timestamp=$(date '+%Y-%m-%d-%H-%M-%S')
 	logis="$LOGDIR/chatlog_$timestamp"
-	printf "\\n chatai Chat Log: $timestamp\\n\\n" > $logis
+	case $WHICHAI in
+		0)
+			printf "\\n chatai Gemini Chat Log: $timestamp\\n\\n" > $logis
+		;;
+		1)
+			printf "\\n chatai Claude Chat Log: $timestamp\\n\\n" > $logis
+		;;
+		2)
+			printf "\\n chatai Gemini and Claude Chat Log: $timestamp\\n\\n" > $logis
+		;;
+		*)
+			printf "\\nSomeone is confused...\\n"
+			exit
+		;;
+	esac
 
 }
 
@@ -315,18 +446,102 @@ showlogs() {
 		logs=$(ls -t "$LOGDIR")
 		for log in $logs
 		do
+			printf "\\nLog file %s\\n" $LOGDIR/$log
 			/bin/more $LOGDIR/$log
+			printf "\\nPress Enter to continue..."
 			read a
 		done
 	fi
 }
+
+analyzefile() {
+
+	checkenv
+	setconfigs
+
+# cleanup special chars for JSON strings and call AI bot
+
+	cleanfile=$(echo "$input" | sed 's/\"/\\"/g' | sed 's/$/\\n/g' | tr -d '\n')	# cleanup some JSON things...
+	question="Please analyze this ${ftype} file: ${cleanfile}"
+	case $WHICHAI in
+		0)
+			callgemini
+		;;
+		1)
+			callclaude
+		;;
+		2)
+			callgemini
+			callclaude
+		;;
+		*)
+			printf "\\nSomeone is confused...\\n"
+			exit
+		;;
+	esac
+}
+
+doanalyze() {
+
+	while true; do
+		printf "\\nWhat type of file to analyze:\\n"
+		printf " Makes for more accurate resul\\n"
+		printf "  1) text\\n"
+		printf "  2) code\\n"
+		printf "  3) log\\n\\n"
+		printf "(1 or 2 or 3) ? "
+		read choice
+		case $choice in
+			1|text)
+				ftype="text"
+				break
+			;;
+			2|code)
+				ftype="code"
+				break
+			;;
+			3|log)
+				ftype="log"
+				break
+			;;
+			q)
+				exit
+			;;	
+			*)
+				printf "Either 1,2 or 3\\n"
+			;;
+		esac
+	done
+	printf "\\nFile: "
+	read filename
+	chkfile $filename
+	analyzefile $ftype
+}
+		
 
 dochat() {
 
 	checkenv
 	setconfigs
 
-	printf "\\n\\nGeminiAI Chat mode. Enter a line of text and get a response.\\n"
+	case $WHICHAI in
+		0)
+			printf "\\n\\nGeminiAI Chat mode. Enter a line of text and get a response.\\n"
+		;;
+		1)
+			printf "\\n\\nClaudeAI Chat mode. Enter a line of text and get a response.\\n"
+		;;
+		2)
+			printf "\\n\\nBoth Gemini and Claude Chat mode.\\n"
+			printf "${BOLDCYAN}Geminis response will be in Cyan ${CLEARFORMAT}and${BOLDBLUE} Claudes response in Blue ${CLEARFORMAT}.\\n"
+			printf "Enter text and get both responses.\\n\\n"
+		;;
+		*)
+			printf "\\nSomeone is confused...\\n"
+			exit
+		;;
+	esac
+
 	printf "    Enter "q" to exit this mode\\n\\n"
 
 	while true; do
@@ -334,14 +549,34 @@ dochat() {
 		if [[ "$input" == "q" ]]; then
         		echo "Exiting..."
         		break
-    		fi
+		fi
 
-    # Call GenAI API
-	if [ ! -z "$input" ]; then
-		cleanout=$(echo $input | sed "s/\"/'/g")
-		genaiqa "$cleanout"
-	fi
-done
+    # Call AI API
+
+		if [[ "$input" == "analyze" ]]; then
+			doanalyze
+		elif [ ! -z "$input" ]; then
+			question=$(echo "$input" | sed 's/\"/\\"/g' | sed 's/$/\\n/g' | tr -d '\n')	# cleanup some JSON things...
+			case $WHICHAI in
+				0)
+					callgemini
+				;;
+				1)
+					callclaude 
+				;;
+				2)
+					printf "${BOLD}Gemini\\n ${CLEARFORMAT}"
+					callgemini
+					printf "${BOLD}\\nClaude\\n ${CLEARFORMAT}"
+					callclaude
+				;;
+				*)
+					printf "\\nSomeone is confused...\\n"
+					exit
+				;;
+			esac
+		fi
+	done
 }
 
 #
@@ -366,6 +601,15 @@ doaichat() {
 					showhelp
 					exit
 				;;
+				gemini)
+					whichone=0
+				;;
+				claude)
+					whichone=1
+				;;
+				both)
+					whichone=2
+				;;
 				log)
 					logchat=1
 				;;
@@ -373,7 +617,11 @@ doaichat() {
 					showlogs
 					exit
 				;;
-
+				analyze)
+					analyze=1
+					chkfile "$2"
+					shift
+				;;
 				update)
 					doupdate
 					exit
@@ -397,6 +645,11 @@ doaichat() {
 	checkenv
 	setconfigs
 
+	if [ $analyze = 1 ]; then
+		analyzefile "text"
+		exit
+	fi
+
 	if [ $logchat = 1 ]; then
 		startchatlog
 	fi
@@ -409,6 +662,27 @@ doaichat() {
 
 }
 
+checkgeminikey() {
+	if grep -q "PutYourGeminiAPIKeyHere" $SCRIPTDIR/$CONFIG; then
+		printf "\\n Gemini API Key not detected in $SCRIPTDIR/$CONFIG\\n"
+		printf "\\nGet a key from https://aistudio.google.com/app/apikey and add it\\n"
+		printf "to $SCRIPTDIR/$CONFIG.\\n"
+		printf "chatai: exiting\\n"
+		exit
+	fi
+}
+
+checkclaudekey() {
+	if grep -q "PutYourClaudeAPIKeyHere" $SCRIPTDIR/$CONFIG; then
+		printf "\\n Claude API Key not detected in $SCRIPTDIR/$CONFIG\\n"
+		printf "\\nGet a key from https://docs.anthropic.com/en/api/getting-started and add it\\n"
+		printf "to $SCRIPTDIR/$CONFIG.\\n"
+		printf "chatai: exiting\\n"
+		exit
+	fi
+}
+
+
 checkenv() {
 
 	if [ ! -f $SCRIPTDIR/$CONFIG ]; then
@@ -416,13 +690,24 @@ checkenv() {
 		exit
 	fi
 
-	if grep -q "PutYourAPIKeyHere" $SCRIPTDIR/$CONFIG; then
-		printf "\\n API Key not detected in $SCRIPTDIR/$CONFIG\\n"
-		printf "\\nGet a key from https://aistudio.google.com/app/apikey and add it\\n"
-		printf "to $SCRIPTDIR/$CONFIG.\\n"
-		printf "chatai: exiting\\n"
-		exit
-	fi
+	case $WHICHAI in
+		0)
+			checkgeminikey
+		;;
+		1)
+			checkclaudekey
+		;;
+		2)
+			if grep -q "PutYour" $SCRIPTDIR/$CONFIG; then
+				printf "\\n One or more of the API Keys not detected in $SCRIPTDIR/$CONFIG\\n"
+				printf "\\nGet a key from https://aistudio.google.com/app/apikey and https://docs.anthropic.com/en/api/getting-started\\n"
+				printf "and add them to $SCRIPTDIR/$CONFIG.\\n"
+				printf "chatai: exiting\\n"
+				exit
+			fi
+		;;
+	esac
+
 
 }
 
@@ -432,15 +717,24 @@ setconfigs() {
 
 	source $SCRIPTDIR/$CONFIG
 
+# override default AI bot if set in command line
+
+	if [ "$whichone" != "9" ]; then
+		WHICHAI="$whichone"
+	fi
+
+
 }
 
 # remove temp files
 
 cleanupfiles() {
-	rm -f genresp
+	rm -f $AIRESP
 }
 
 # Main script
+
+trap "rm -f $AIRESP" 0 1 2 5 15
 
 doaichat "$@"
 
