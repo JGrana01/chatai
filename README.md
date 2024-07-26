@@ -1,13 +1,15 @@
 # chatai
 
 chatai will start an interactive "chat" session with either Googles Gemini AI or Anthropics Claude (or both at once) bots.
-chatai also supports an analyze mode for files such as small shell scripts, log files etc.
+chatai also supports an analyze mode for files such as log files, small shell scripts etc.
 
 ## Installation
 
 For Asuswrt-merlin based routers running Entware, using your preferred SSH client/terminal, copy and paste the following command, then press Enter:
 
 /usr/sbin/curl --retry 3 "https://raw.githubusercontent.com/JGrana01/chatai/master/chatai" -o "/jffs/scripts/chatai" && chmod 0755 /jffs/scripts/chatai && /jffs/scripts/chatai install
+
+Install will check for Entware (and bail of not found), check and install the apps jq and fold, then setup a default chatai.conf file in /jffs/addons/chatai.
 
 Before actually using chatai for the first time, you will need to get an API_KEY from Google and/or Anthropic.
 
@@ -94,11 +96,17 @@ MAXSIZE="32767"                     # Maximum number of characters in any reques
 
 ```
 _GAPI_KEY_ - the key created by you when you asked for a Gemini API key
+
 _CAPI_KEY_ - the key created by you when to setup Antropics Claude developer
+
 _WHICHAI_ - set to 0 (default) for Gemini, 1 for Claude or 2 to have both respond to your questions or analysis
+
 _LOGDIR_ - where you want chatai to store log files of the session. Default is in the /jffs/addons/chatai/logs
+
 _NUMLOGS_ - the number of log files to store at a time. Its a circular method - a new log file overrides the oldest
+
 _MAXLINES_ - the maximium number of lines of text to send. This can be increased - but should be cautiously - more lines - more tokens used.
+
 _MAXSIZE_ - this is the maximium number of characters to send. Again, can be increased - more dependent on shell variable length :-)
 
 ## Usage
@@ -140,12 +148,11 @@ Commands line arguments can be combined. For example, to have both bots answer y
 $ chatai both log
 ```
 
-There is a **special mode** while in chat - analyze while in chat. To invoke this mode, while at the chat prompt, enter just the word "analyze":
+There is a **special mode** while in chat - analyze while in chat. To invoke this mode, while at the chat prompt, enter just the word "analyze".
+
+chatai will ask for the type of file and filename:
+
 ```
-Enter text and get both responses.
-
-    Enter q to exit this mode
-
 chat> analyze
 
 What type of file to analyze:
@@ -166,7 +173,7 @@ Once the file is analyzed and displayed, chatai returns to chat mode. Useful for
 ## Notes
 
 Be careful with JSON special characters - especially escape sequences in code (i.e. "\\\n"). chatai attempts to clean up files and questions by
-replacing "returns" to "\\n" and escaping double quotes.
+replacing "returns" to "\\n" and escaping double quotes - but many large shell scripts likely wont get passed via JSON...
 
 Following good Asuswrt-merlin Addon methods, chatai has install, uninstall and update functions.
 
