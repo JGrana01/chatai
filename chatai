@@ -9,7 +9,7 @@ readonly PROGDIR=/jffs/scripts
 readonly SCRIPTDIR=/jffs/addons/$PROGNAME
 readonly SCRIPTLOGDIR=/jffs/addons/$PROGNAME/logs
 readonly CONFIG=$PROGNAME.conf
-readonly VERSION=0.2.3
+readonly VERSION=0.3.1
 
 
 # text formatting
@@ -73,6 +73,16 @@ checkexit() {
 
 doinstall() {
 
+
+# check for entware, bail if not there
+
+
+	if [ ! -x /opt/bin/opkg ]; then
+		printf "\\nEntware not deteted (and needed)\\n"
+		printf "Install using AMTM and try again.\\n"
+		exit 1
+	fi
+
 	printf "\\nInstall $PROGNAME\\n"
 	printf "\\nAre you sure you want to install $PROGNAME and it's required apps (fold and jq) and config file (Y|N) ?"
 	read -r answr
@@ -97,14 +107,8 @@ doinstall() {
 		rm -f ./$PROGNAME.sh
 	fi
 
-# check for entware, bail if not there
 
-	printf "\\n\\nInstalling $PROGNAME\\n\\n"
-	if [ ! -x /opt/bin/opkg ]; then
-		printf "\\nEntware not deteted (and needed)\\n"
-		printf "Install using AMTM and try again.\\n"
-		exit 1
-	fi
+	printf "\\n\\nChecking for help apps..."
 
 # check for required helper apps
 
@@ -147,6 +151,8 @@ doinstall() {
 
 # setup addon dir and config file
 
+	printf "ok done.\\n\\nCreating and setting up $SCRIPTDIR\\n"
+
 	mkdir -p $SCRIPTDIR
 
 
@@ -177,7 +183,9 @@ EOF
 	mkdir -p $LOGDIR
 
 	printf "\\n$SCRIPTDIR/$CONFIG created and $PROGNAME installed in /opt/sbin\\n"
-	printf "\\nBefore running $PROGNAME you will need to get a Google Gemini API key\\n"
+	printf "Here is $SCRIPTDIR/$CONFIG:\\n\\n
+	cat $SCRIPTDIR/$CONFIG
+	printf "\\n\\nBefore running $PROGNAME you will need to get a Google Gemini API key\\n"
 	printf "from https://aistudio.google.com/app/apikey\\n"
 	printf "or from Anthropic for Claude at https://docs.anthropic.com/en/api/getting-started\\n"
 	printf " - or both if you want to use both\\n"
