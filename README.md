@@ -93,6 +93,9 @@ NUMLOGS="5"                          # number of log sessions to save for later 
 MAXLINES="200"                      # Maximum number of lines in a file to analyze
                                     # use cautin in making it too large...
 MAXSIZE="32767"                     # Maximum number of characters in any request
+ALWAYSTRIM="0"                      # always trim to MAZLINES any file for analysis
+                                    # 0: Ask if triming needed   1: Always trim the file          
+
 
 ```
 _GAPI_KEY_ - the key created by you when you asked for a Gemini API key
@@ -108,6 +111,8 @@ _NUMLOGS_ - the number of log files to store at a time. Its a circular method - 
 _MAXLINES_ - the maximium number of lines of text to send. This can be increased - but should be cautiously - more lines - more tokens used.
 
 _MAXSIZE_ - this is the maximium number of characters to send. Again, can be increased - more dependent on shell variable length :-)
+
+_ALWAYSTRIM_ - If a file for analysys is greater than MAXLINES, either ask if it should be trimmed (0) or just trim it without prompting (1)
 
 ## Usage
 
@@ -147,6 +152,21 @@ Commands line arguments can be combined. For example, to have both bots answer y
 ```
 $ chatai both log
 ```
+If chatai is invoked with the analyze command, it will take the passed _filename_, check that is exists and is less than MAXLINES long and MAXSIZE bytes and pass on for analysis. If the file is too long, chatai will offer to shorten it to MAXLINES. 
+
+```
+$ chatai analyze myfile
+```
+
+You can specify which AI should do the analysis or use both. You can also log the analysis:
+
+```
+$chatai both log analyze /tmp/syslog.log
+```
+
+This can be useful to anaylze log files such as /tmp/syslog.log. Keep in mind, if the file is longer than MAXLINES long and ALWAYSTRIM is 0, chatai will offer to shorten it to the last MAXLINES long. If the file is longer than MAXLINES and ALWAYSTRIM is 1, chatai will use tail to shorten the file.
+
+If there is a specific series of lines you want anaylzed, shorten the file to just those lines. Also, be careful using analyze in a script with potentially long files. It will block asking to shorten...
 
 There is a **special mode** while in chat - analyze while in chat. To invoke this mode, while at the chat prompt, enter just the word "analyze".
 
@@ -165,7 +185,10 @@ What type of file to analyze:
 chatai will ask what type of file you plan to have analyzed (makes for more accurate analysis). Enter either 1 (text), 2 (code) or 3 (log)
 
 chatai will then ask for the filename. If it is too large (> MAXSIZE) it will tell you and not send on.
-If the file has more lines in it then MAXLINES, chatai will ask if you want it to reduce the number of lines to MAXLINES (using tail).
+If the file has more lines in it then MAXLINES and ALWAYSTRIM is 0, chatai will ask if you want it to reduce the number of lines to MAXLINES (using tail).
+
+If ALWAYSTRIM is set to 1, chatai will always trim the file to MAXLINES without prompting.
+
 Note below about special characters, especially with shell scripts. I'm working on solutions...
 
 Once the file is analyzed and displayed, chatai returns to chat mode. Useful for asking more questions about its analysis.
