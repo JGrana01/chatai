@@ -183,7 +183,7 @@ EOF
 	mkdir -p $LOGDIR
 
 	printf "\\n$SCRIPTDIR/$CONFIG created and $PROGNAME installed in /opt/sbin\\n"
-	printf "Here is $SCRIPTDIR/$CONFIG:\\n\\n
+	printf "Here is $SCRIPTDIR/$CONFIG:\\n\\n"
 	cat $SCRIPTDIR/$CONFIG
 	printf "\\n\\nBefore running $PROGNAME you will need to get a Google Gemini API key\\n"
 	printf "from https://aistudio.google.com/app/apikey\\n"
